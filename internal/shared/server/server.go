@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/maevlava/resume-backend/config"
+	"github.com/maevlava/resume-backend/internal/shared/config"
 	"net/http"
 )
 

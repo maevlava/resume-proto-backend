@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/maevlava/resume-backend/config"
-	"github.com/maevlava/resume-backend/logger"
-	"github.com/maevlava/resume-backend/server"
+	"github.com/maevlava/resume-backend/internal/shared/config"
+	"github.com/maevlava/resume-backend/internal/shared/logger"
+	"github.com/maevlava/resume-backend/internal/shared/server"
 	"github.com/rs/zerolog/log"
 	"net/http"
 )

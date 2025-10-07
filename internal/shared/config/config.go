@@ -10,15 +10,16 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	viper.AddConfigPath("./config")
+	viper.AddConfigPath(".")
 	viper.SetConfigName("dev")
 	viper.SetConfigType("env")
 
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Error().Err(err).Msg("Error reading config file")
-		return nil
+		log.Warn().Err(err).Msg("Error reading env config file")
+	} else {
+		log.Info().Msg("Config file loaded")
 	}
 
 	return &Config{
