@@ -7,6 +7,8 @@ import (
 
 type Config struct {
 	ServerAddress string
+	JWTSecret     string
+	DBString      string
 }
 
 func LoadConfig() *Config {
@@ -24,5 +26,7 @@ func LoadConfig() *Config {
 
 	return &Config{
 		ServerAddress: viper.GetString("SERVER_ADDRESS"),
+		JWTSecret:     viper.GetString("JWT_SECRET"),
+		DBString:      viper.GetString("DB_STRING"),
 	}
 }
