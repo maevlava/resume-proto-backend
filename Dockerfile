@@ -20,6 +20,8 @@ WORKDIR /home/appuser
 
 COPY --from=builder /app/server .
 
+RUN mkdir -p /home/appuser/uploads && chown -R appuser:appgroup /home/appuser
+
 USER appuser
 
 EXPOSE 8080

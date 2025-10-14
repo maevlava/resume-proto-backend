@@ -2,27 +2,33 @@ package server
 
 import (
 	"github.com/maevlava/resume-backend/internal/features/auth"
+	"github.com/maevlava/resume-backend/internal/features/upload"
 	"github.com/maevlava/resume-backend/internal/shared/config"
 	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/middleware"
+	"github.com/maevlava/resume-backend/internal/shared/storage"
 	"net/http"
 )
 
 type ResumeProtoServer struct {
-	cfg         *config.Config
-	db          *db.Queries
-	Router      *http.ServeMux
-	Address     string
-	AuthHandler *auth.Handler
+	cfg           *config.Config
+	db            *db.Queries
+	storage       storage.Store // change to s3 for production
+	Router        *http.ServeMux
+	Address       string
+	AuthHandler   *auth.Handler
+	UploadHandler *upload.Handler
 }
 
-func NewResumeProtoServer(cfg *config.Config, db *db.Queries) *ResumeProtoServer {
+func NewResumeProtoServer(cfg *config.Config, db *db.Queries, store storage.Store) *ResumeProtoServer {
 	s := &ResumeProtoServer{
-		cfg:         cfg,
-		db:          db,
-		Address:     cfg.ServerAddress,
-		Router:      http.NewServeMux(),
-		AuthHandler: auth.NewHandler(cfg, db),
+		cfg:           cfg,
+		db:            db,
+		storage:       store,
+		Address:       cfg.ServerAddress,
+		Router:        http.NewServeMux(),
+		AuthHandler:   auth.NewHandler(cfg, db),
+		UploadHandler: upload.NewHandler(store),
 	}
 
 	s.RegisterRoutes()
@@ -31,5 +37,8 @@ func NewResumeProtoServer(cfg *config.Config, db *db.Queries) *ResumeProtoServer
 
 func (s *ResumeProtoServer) RegisterRoutes() {
 	cors := middleware.EnableCORS
+	requireAuth := middleware.RequireAuth(s.cfg)
+
 	s.AuthHandler.RegisterRoutes(s.Router, cors)
+	s.UploadHandler.RegisterRoutes(s.Router, cors, requireAuth)
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/logger"
 	"github.com/maevlava/resume-backend/internal/shared/server"
+	"github.com/maevlava/resume-backend/internal/shared/storage"
 	"github.com/rs/zerolog/log"
 	"net/http"
 	"time"
@@ -19,10 +20,16 @@ func main() {
 	conn, queries := connectToDatabase(context.Background(), cfg)
 	defer conn.Close()
 
-	srv := server.NewResumeProtoServer(cfg, queries)
+	FSStore, err := storage.NewFSStore(cfg.StoragePath)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Error creating storage")
+		return
+	}
+
+	srv := server.NewResumeProtoServer(cfg, queries, FSStore)
 
 	log.Info().Msgf("Starting server on %s", srv.Address)
-	err := http.ListenAndServe(srv.Address, srv.Router)
+	err = http.ListenAndServe(srv.Address, srv.Router)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error starting server")
 	}

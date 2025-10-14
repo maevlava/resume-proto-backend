@@ -9,6 +9,7 @@ type Config struct {
 	ServerAddress string
 	JWTSecret     string
 	DBString      string
+	StoragePath   string
 }
 
 func LoadConfig() *Config {
@@ -23,10 +24,13 @@ func LoadConfig() *Config {
 	} else {
 		log.Info().Msg("Config file loaded")
 	}
+	log.Info().Msgf("Storage Path %s", viper.GetString("STORAGE_PATH"))
+	log.Info().Msgf("Jwt secret %s", viper.GetString("JWT_SECRET"))
 
 	return &Config{
 		ServerAddress: viper.GetString("SERVER_ADDRESS"),
 		JWTSecret:     viper.GetString("JWT_SECRET"),
 		DBString:      viper.GetString("DB_STRING"),
+		StoragePath:   viper.GetString("STORAGE_PATH"),
 	}
 }

@@ -1,6 +1,12 @@
 package middleware
 
-import "net/http"
+import (
+	"context"
+	"github.com/maevlava/resume-backend/internal/shared/common"
+	"github.com/maevlava/resume-backend/internal/shared/config"
+	"github.com/rs/zerolog/log"
+	"net/http"
+)
 
 type Middleware func(http.Handler) http.HandlerFunc
 
@@ -22,5 +28,27 @@ func EnableCORS(next http.Handler) http.HandlerFunc {
 			return
 		}
 		next.ServeHTTP(w, r)
+	}
+}
+func RequireAuth(cfg *config.Config) Middleware {
+	return func(next http.Handler) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie("auth_token")
+			if err != nil {
+				log.Error().Err(err).Msg("Error getting cookie")
+				common.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
+				return
+			}
+
+			claims, err := common.ValidateJWT(cookie.Value, cfg.JWTSecret)
+			if err != nil {
+				log.Error().Err(err).Msg("Error validating token")
+				common.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), "username", claims.Username)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}
 	}
 }

@@ -31,6 +31,7 @@ func (h *Handler) RegisterRoutes(r *http.ServeMux, mws ...middleware.Middleware)
 	r.Handle("/api/v1/auth/login", middleware.Chain(http.HandlerFunc(h.Login), mws...))
 	r.Handle("POST /api/v1/auth/register", middleware.Chain(http.HandlerFunc(h.Register), mws...))
 	r.Handle("/api/v1/auth/validate", middleware.Chain(http.HandlerFunc(h.Validate), mws...))
+	r.Handle("/api/v1/auth/logout", middleware.Chain(http.HandlerFunc(h.Logout), mws...))
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +67,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// generate token
 	tokenDuration := 24 * time.Hour
-	tokenString, err := MakeJWT(user.ID, h.cfg.JWTSecret, tokenDuration)
+	tokenString, err := common.MakeJWT(user, h.cfg.JWTSecret, tokenDuration)
 	if err != nil {
 		log.Error().Err(err).Msg("Error generating token")
 	}
@@ -75,12 +76,29 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    tokenString,
+		Path:     "/",
 		Expires:  time.Now().Add(tokenDuration),
 		HttpOnly: true,
 		Secure:   false, // change to true in production
 	})
 
 	common.RespondWithJSON(w, http.StatusOK, map[string]string{})
+	return
+}
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	// delete cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    "",
+		Expires:  time.Now(),
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/api/v1/auth",
+	})
+
+	common.RespondWithJSON(w, http.StatusOK, map[string]string{})
+	log.Info().Msg("User logged out")
 	return
 }
 
@@ -132,7 +150,7 @@ func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// validate token
-	_, err = ValidateJWT(cookie.Value, h.cfg.JWTSecret)
+	_, err = common.ValidateJWT(cookie.Value, h.cfg.JWTSecret)
 	if err != nil {
 		log.Error().Err(err).Msg("Error validating token")
 		common.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")

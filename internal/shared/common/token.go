@@ -1,22 +1,32 @@
-package auth
+package common
 
 import (
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
+	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/rs/zerolog/log"
 	"time"
 )
 
-func MakeJWT(userId uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {
+type CustomClaims struct {
+	Email    string `json: "email"`
+	Username string `json:"username"`
+	jwt.RegisteredClaims
+}
+
+func MakeJWT(user db.User, tokenSecret string, expiresIn time.Duration) (string, error) {
 	// signing method
 	signingMethod := jwt.SigningMethodHS256
 	// claims
-	claims := jwt.RegisteredClaims{
-		Issuer:    "resume-proto",
-		IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(expiresIn)),
-		Subject:   userId.String(),
+	claims := CustomClaims{
+		Email:    user.Email,
+		Username: user.Name,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "resume-proto",
+			IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(expiresIn)),
+			Subject:   user.ID.String(),
+		},
 	}
 	// token
 	token := jwt.NewWithClaims(signingMethod, claims)
@@ -30,8 +40,8 @@ func MakeJWT(userId uuid.UUID, tokenSecret string, expiresIn time.Duration) (str
 	return signedToken, nil
 }
 
-func ValidateJWT(tokenString string, tokenSecret string) (*jwt.RegisteredClaims, error) {
-	claims := &jwt.RegisteredClaims{}
+func ValidateJWT(tokenString string, tokenSecret string) (*CustomClaims, error) {
+	claims := &CustomClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
