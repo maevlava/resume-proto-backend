@@ -4,6 +4,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/maevlava/resume-backend/internal/shared/common"
@@ -11,9 +15,6 @@ import (
 	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/middleware"
 	"github.com/rs/zerolog/log"
-	"io"
-	"net/http"
-	"time"
 )
 
 type Handler struct {

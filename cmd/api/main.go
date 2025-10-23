@@ -4,14 +4,16 @@ import (
 	"context"
 	"database/sql"
 	_ "database/sql"
+	"net/http"
+	"time"
+
 	"github.com/maevlava/resume-backend/internal/shared/config"
 	"github.com/maevlava/resume-backend/internal/shared/db"
+	"github.com/maevlava/resume-backend/internal/shared/deepseek"
 	"github.com/maevlava/resume-backend/internal/shared/logger"
 	"github.com/maevlava/resume-backend/internal/shared/server"
 	"github.com/maevlava/resume-backend/internal/shared/storage"
 	"github.com/rs/zerolog/log"
-	"net/http"
-	"time"
 )
 
 func main() {
@@ -26,7 +28,9 @@ func main() {
 		return
 	}
 
-	srv := server.NewResumeProtoServer(cfg, queries, FSStore)
+	deepseekClient := deepseek.NewClient(cfg.DeepseekAPIKey)
+
+	srv := server.NewResumeProtoServer(cfg, queries, FSStore, deepseekClient)
 
 	log.Info().Msgf("Starting server on %s", srv.Address)
 	err = http.ListenAndServe(srv.Address, srv.Router)

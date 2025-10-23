@@ -19,6 +19,9 @@ func NewFSStore(baseDir string) (*FSStore, error) {
 	}
 	return &FSStore{baseDir: baseDir}, nil
 }
+func (s *FSStore) BaseDir() string {
+	return s.baseDir
+}
 func (s *FSStore) Save(path string, r io.Reader) error {
 	// create dirs
 	fullPath := filepath.Join(s.baseDir, path)
@@ -26,6 +29,7 @@ func (s *FSStore) Save(path string, r io.Reader) error {
 		log.Error().Err(err).Msg("Failed to create directory for file")
 		return err
 	}
+	log.Info().Msgf("Saving file to %s", fullPath)
 
 	// create file
 	f, err := os.Create(fullPath)
@@ -40,7 +44,7 @@ func (s *FSStore) Save(path string, r io.Reader) error {
 
 	return err
 }
-func (s *FSStore) Read(path string) (io.ReadCloser, error) {
+func (s *FSStore) Read(path string) (*os.File, error) {
 	return os.Open(filepath.Join(s.baseDir, path))
 }
 func (s *FSStore) Delete(path string) error {

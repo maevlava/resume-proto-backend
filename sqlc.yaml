@@ -1,8 +1,8 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    schema: "./sql/schema"
-    queries: "./sql/queries"
+    schema: "../resume-infra/sql/schema"
+    queries: "./internal/shared/db/queries"
     gen:
       go:
         out: "internal/shared/db"

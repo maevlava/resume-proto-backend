@@ -40,14 +40,12 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	uploadRequest := UploadRequest{
-		File:           file,
-		JobTitle:       r.FormValue("job_title"),
-		JobDescription: r.FormValue("job_description"),
-		CompanyName:    r.FormValue("company_name"),
+		File:     file,
+		Category: r.FormValue("category"),
 	}
 
-	// username/job title/file
-	path := filepath.Join(username, uploadRequest.JobTitle, header.Filename)
+	// username/category/file
+	path := filepath.Join(username, uploadRequest.Category, header.Filename)
 
 	// save
 	if err := h.store.Save(path, file); err != nil {
@@ -56,5 +54,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	common.RespondWithJSON(w, http.StatusOK, map[string]string{
+		"fullPath": path,
+	})
 }
