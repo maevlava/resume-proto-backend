@@ -2,10 +2,12 @@ package common
 
 import (
 	"fmt"
+	"image"
 	"io"
 	"os"
 	"strings"
 
+	"github.com/gen2brain/go-fitz"
 	"github.com/ledongthuc/pdf"
 	"github.com/rs/zerolog/log"
 )
@@ -71,4 +73,22 @@ func cleanPDFText(s string) string {
 	}
 
 	return strings.TrimSpace(result.String())
+}
+
+func PDFToImage(pdfPath *os.File) (*image.RGBA, error) {
+	doc, err := fitz.NewFromReader(pdfPath)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to open PDF")
+		return nil, err
+	}
+	defer doc.Close()
+
+	img, err := doc.Image(0)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get image from PDF")
+		return nil, err
+	}
+
+	return img, nil
+
 }

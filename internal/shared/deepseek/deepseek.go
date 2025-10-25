@@ -52,10 +52,8 @@ func (c *Client) Chat(ctx context.Context, request ChatRequest) (*ChatResponse, 
 	}
 	defer response.Body.Close()
 
-	// TODO should it be unmarshaled into a struct?
 	var chatResponse ChatResponse
 	respBody, err := io.ReadAll(response.Body)
-	log.Info().Msgf("resp body %s", respBody)
 	if err := json.Unmarshal(respBody, &chatResponse); err != nil {
 		log.Error().Err(err).Msg("Failed to unmarshal JSON")
 		return nil, err
