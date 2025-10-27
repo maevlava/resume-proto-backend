@@ -78,15 +78,13 @@ func cleanPDFText(s string) string {
 func PDFToImage(pdfPath *os.File) (*image.RGBA, error) {
 	doc, err := fitz.NewFromReader(pdfPath)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to open PDF")
-		return nil, err
+		return nil, fmt.Errorf("pdf: failed to open PDF: %w", err)
 	}
 	defer doc.Close()
 
 	img, err := doc.Image(0)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get image from PDF")
-		return nil, err
+		return nil, fmt.Errorf("pdf: failed to get image: %w", err)
 	}
 
 	return img, nil

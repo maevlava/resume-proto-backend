@@ -11,11 +11,11 @@ import (
 
 type Middleware func(http.Handler) http.HandlerFunc
 
-func Chain(h http.Handler, middlewares ...Middleware) http.Handler {
+func Chain(h http.Handler, middlewares ...Middleware) http.HandlerFunc {
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		h = middlewares[i](h)
 	}
-	return h
+	return h.ServeHTTP
 }
 func EnableCORS(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

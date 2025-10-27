@@ -1,6 +1,8 @@
 package server
 
 import (
+	"net/http"
+
 	"github.com/maevlava/resume-backend/internal/features/ai"
 	"github.com/maevlava/resume-backend/internal/features/auth"
 	"github.com/maevlava/resume-backend/internal/features/upload"
@@ -9,7 +11,6 @@ import (
 	"github.com/maevlava/resume-backend/internal/shared/deepseek"
 	"github.com/maevlava/resume-backend/internal/shared/middleware"
 	"github.com/maevlava/resume-backend/internal/shared/storage"
-	"net/http"
 )
 
 type ResumeProtoServer struct {
@@ -52,4 +53,11 @@ func (s *ResumeProtoServer) RegisterRoutes() {
 	s.AuthHandler.RegisterRoutes(s.Router, cors)
 	s.UploadHandler.RegisterRoutes(s.Router, cors, requireAuth)
 	s.AIHandler.RegisterRoutes(s.Router, cors, requireAuth)
+
+	// static files
+	fileServer := http.FileServer(http.Dir(s.cfg.StoragePath))
+	s.Router.Handle("/uploads/", http.StripPrefix("/uploads/", fileServer))
+
+	//TOOD buka static image server
+
 }

@@ -3,14 +3,15 @@ package ai
 import (
 	"context"
 	"encoding/json/v2"
+	"io"
+	"net/http"
+	"time"
+
 	"github.com/maevlava/resume-backend/internal/shared/common"
 	"github.com/maevlava/resume-backend/internal/shared/deepseek"
 	"github.com/maevlava/resume-backend/internal/shared/middleware"
 	"github.com/maevlava/resume-backend/internal/shared/storage"
 	"github.com/rs/zerolog/log"
-	"io"
-	"net/http"
-	"time"
 )
 
 type Handler struct {
