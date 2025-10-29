@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/maevlava/resume-backend/internal/shared/common"
+	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/middleware"
 	"github.com/maevlava/resume-backend/internal/shared/server/httperror"
 	"github.com/maevlava/resume-backend/internal/shared/storage"
@@ -12,12 +13,12 @@ import (
 )
 
 type Handler struct {
-	service *service
+	service *Service
 }
 
-func NewHandler(store storage.Store) *Handler {
+func NewHandler(store storage.Store, db *db.Queries) *Handler {
 	return &Handler{
-		service: NewService(store),
+		service: NewService(store, db),
 	}
 }
 func (h *Handler) RegisterRoutes(r *http.ServeMux, mws ...middleware.Middleware) {
@@ -45,7 +46,9 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 		return httperror.BadRequest("missing or invalid file", err)
 	}
 	defer file.Close()
-	jobtitle := r.FormValue("jobtitle")
+	jobTitle := r.FormValue("jobTitle")
+	jobDescription := r.FormValue("jobDescription")
+	companyName := r.FormValue("companyName")
 
 	// validate pdf
 	rawContentType := header.Header.Get("Content-Type")
@@ -58,18 +61,28 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// saves
-	pdfPath, err := h.service.SavePDF(username, jobtitle, file)
+	pdfPath, err := h.service.SavePDF(username, jobTitle, file)
 	if err != nil {
 		return httperror.InternalServerError("failed to save pdf", err)
 	}
-	imagePath, err := h.service.SavePDFImage(username, jobtitle, pdfPath)
+	imagePath, err := h.service.SavePDFImage(username, jobTitle, pdfPath)
 	if err != nil {
 		return httperror.InternalServerError("failed to save pdf image", err)
 	}
 
-	log.Info().Msgf("PDF saved to %s", pdfPath)
-	log.Info().Msgf("PDF image saved to %s", imagePath)
+	resumeID, err := h.service.CreateResume(r.Context(), CreateResumeParams{
+		Name:        username,
+		Title:       jobTitle,
+		Description: jobDescription,
+		CompanyName: companyName,
+		PdfPath:     pdfPath,
+		ImagePath:   imagePath,
+	})
+	if err != nil {
+		return httperror.InternalServerError("failed to create resume", err)
+	}
+	log.Info().Msgf("resume created: %s", resumeID.String())
 
-	common.RespondWithJSON(w, http.StatusOK, map[string]string{"pdfPath": pdfPath, "imagePath": imagePath})
+	common.RespondWithJSON(w, http.StatusOK, map[string]string{"resumeID": resumeID.String()})
 	return nil
 }

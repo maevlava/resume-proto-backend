@@ -38,8 +38,8 @@ func NewResumeProtoServer(
 		Address:       cfg.ServerAddress,
 		Router:        http.NewServeMux(),
 		AuthHandler:   auth.NewHandler(cfg, db),
-		UploadHandler: upload.NewHandler(store),
-		AIHandler:     ai.NewHandler(aiService, store),
+		UploadHandler: upload.NewHandler(store, db),
+		AIHandler:     ai.NewHandler(store, aiService, db),
 	}
 
 	s.RegisterRoutes()

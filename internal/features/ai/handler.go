@@ -2,57 +2,54 @@ package ai
 
 import (
 	"context"
-	"encoding/json/v2"
-	"io"
 	"net/http"
 	"time"
 
 	"github.com/maevlava/resume-backend/internal/shared/common"
+	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/deepseek"
 	"github.com/maevlava/resume-backend/internal/shared/middleware"
+	"github.com/maevlava/resume-backend/internal/shared/server/httperror"
 	"github.com/maevlava/resume-backend/internal/shared/storage"
-	"github.com/rs/zerolog/log"
+)
+
+var (
+	AnalyzeTimeout = 45 * time.Second
 )
 
 type Handler struct {
-	AIService *deepseek.Client
-	Store     storage.Store
+	service *Service
 }
 
-func NewHandler(AIService *deepseek.Client, store storage.Store) *Handler {
+func NewHandler(store storage.Store, ai *deepseek.Client, db *db.Queries) *Handler {
 	return &Handler{
-		AIService: AIService,
-		Store:     store,
+		service: NewService(store, ai, db),
 	}
 }
 
 func (h *Handler) RegisterRoutes(router *http.ServeMux, mws ...middleware.Middleware) {
-	router.Handle("/api/v1/ai/analyze", middleware.Chain(http.HandlerFunc(h.AnalyzeResume), mws...))
+	use := func(path string, fn httperror.HandlerFunc) {
+		route := httperror.Handler(fn)
+		route = middleware.Chain(route, mws...)
+		router.Handle(path, route)
+	}
+	use("/api/v1/ai/analyze/{id}", h.AnalyzeResume)
 }
 
-func (h *Handler) AnalyzeResume(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+func (h *Handler) AnalyzeResume(w http.ResponseWriter, r *http.Request) error {
+	ctx, cancel := context.WithTimeout(r.Context(), AnalyzeTimeout)
 	defer cancel()
 
-	reqBody, err := io.ReadAll(r.Body)
-	if err != nil {
-		log.Error().Err(err).Msg("Error reading request body")
-		common.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
-		return
+	resumeID := r.PathValue("id")
+	if resumeID == "" {
+		return httperror.BadRequest("AnalyzeResume: missing resume id", nil)
 	}
 
-	var resumeRequest AnalyzeResumeRequest
-	if err := json.Unmarshal(reqBody, &resumeRequest); err != nil {
-		log.Error().Err(err).Msg("Error parsing request body")
-		common.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
-		return
+	updatedResumeID, err := h.service.Analyze(ctx, resumeID)
+	if err != nil {
+		return httperror.InternalServerError("AnalyzeResume: failed to analyze resume", err)
 	}
 
-	chatResponse, err := Analyze(ctx, h.AIService, h.Store, resumeRequest)
-	if err != nil {
-		log.Error().Err(err).Msg("Error analyzing resume")
-		common.RespondWithError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-	common.RespondWithJSON(w, http.StatusOK, chatResponse)
+	common.RespondWithJSON(w, http.StatusOK, map[string]string{"resumeID": updatedResumeID.String()})
+	return nil
 }

@@ -8,6 +8,7 @@ type Resume struct {
 	JobTitle       string
 	JobDescription string
 	CompanyName    string
+	Feedback       string
 	PdfPath        string
 	ImagePath      string
 }

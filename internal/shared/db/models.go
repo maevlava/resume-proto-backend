@@ -5,10 +5,24 @@
 package db
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type Resume struct {
+	ID          uuid.UUID
+	Name        string
+	Title       string
+	Description string
+	CompanyName string
+	Feedback    sql.NullString
+	ImagePath   string
+	PdfPath     string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
 
 type User struct {
 	ID             uuid.UUID
