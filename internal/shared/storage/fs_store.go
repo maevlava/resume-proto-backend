@@ -1,10 +1,11 @@
 package storage
 
 import (
-	"github.com/rs/zerolog/log"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/rs/zerolog/log"
 )
 
 type FSStore struct {

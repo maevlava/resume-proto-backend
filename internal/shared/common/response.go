@@ -2,8 +2,9 @@ package common
 
 import (
 	"encoding/json/v2"
-	"github.com/rs/zerolog/log"
 	"net/http"
+
+	"github.com/rs/zerolog/log"
 )
 
 func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {

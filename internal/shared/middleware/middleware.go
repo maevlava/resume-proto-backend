@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/maevlava/resume-backend/internal/shared/common"
@@ -41,15 +40,14 @@ func RequireAuth(cfg *config.Config) Middleware {
 				return
 			}
 
-			claims, err := common.ValidateJWT(cookie.Value, cfg.JWTSecret)
+			_, err = common.ValidateJWT(cookie.Value, cfg.JWTSecret)
 			if err != nil {
 				log.Error().Err(err).Msg("Error validating token")
 				common.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), "username", claims.Username)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r)
 		}
 	}
 }

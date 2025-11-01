@@ -13,7 +13,7 @@ import (
 )
 
 const createResume = `-- name: CreateResume :one
-INSERT INTO resumes(id, name, title, description, company_name, feedback, image_path, pdf_path)
+INSERT INTO resumes(id, user_id, name, title, description, company_name, feedback, image_path, pdf_path)
 VALUES (
         $1,
         $2,
@@ -22,13 +22,15 @@ VALUES (
         $5,
         $6,
         $7,
-        $8
+        $8,
+        $9
        )
-RETURNING id, name, title, description, company_name, feedback, image_path, pdf_path, created_at, updated_at
+RETURNING id, user_id, name, title, description, company_name, feedback, image_path, pdf_path, created_at, updated_at
 `
 
 type CreateResumeParams struct {
 	ID          uuid.UUID
+	UserID      uuid.UUID
 	Name        string
 	Title       string
 	Description string
@@ -41,6 +43,7 @@ type CreateResumeParams struct {
 func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Resume, error) {
 	row := q.db.QueryRowContext(ctx, createResume,
 		arg.ID,
+		arg.UserID,
 		arg.Name,
 		arg.Title,
 		arg.Description,
@@ -52,6 +55,7 @@ func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Res
 	var i Resume
 	err := row.Scan(
 		&i.ID,
+		&i.UserID,
 		&i.Name,
 		&i.Title,
 		&i.Description,
@@ -66,7 +70,7 @@ func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Res
 }
 
 const getResumeByID = `-- name: GetResumeByID :one
-SELECT id, name, title, description, company_name, feedback, image_path, pdf_path, created_at, updated_at FROM resumes
+SELECT id, user_id, name, title, description, company_name, feedback, image_path, pdf_path, created_at, updated_at FROM resumes
 WHERE resumes.id = $1
 `
 
@@ -75,6 +79,7 @@ func (q *Queries) GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, erro
 	var i Resume
 	err := row.Scan(
 		&i.ID,
+		&i.UserID,
 		&i.Name,
 		&i.Title,
 		&i.Description,
@@ -88,13 +93,53 @@ func (q *Queries) GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, erro
 	return i, err
 }
 
+const getResumesByUserID = `-- name: GetResumesByUserID :many
+SELECT id, user_id, name, title, description, company_name, feedback, image_path, pdf_path, created_at, updated_at FROM resumes
+WHERE resumes.user_id = $1
+`
+
+func (q *Queries) GetResumesByUserID(ctx context.Context, userID uuid.UUID) ([]Resume, error) {
+	rows, err := q.db.QueryContext(ctx, getResumesByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Resume
+	for rows.Next() {
+		var i Resume
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.Title,
+			&i.Description,
+			&i.CompanyName,
+			&i.Feedback,
+			&i.ImagePath,
+			&i.PdfPath,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateResumeByID = `-- name: UpdateResumeByID :one
 UPDATE resumes
 SET
     updated_at = now(),
     feedback = $2
 WHERE id = $1
-RETURNING id, name, title, description, company_name, feedback, image_path, pdf_path, created_at, updated_at
+RETURNING id, user_id, name, title, description, company_name, feedback, image_path, pdf_path, created_at, updated_at
 `
 
 type UpdateResumeByIDParams struct {
@@ -107,6 +152,7 @@ func (q *Queries) UpdateResumeByID(ctx context.Context, arg UpdateResumeByIDPara
 	var i Resume
 	err := row.Scan(
 		&i.ID,
+		&i.UserID,
 		&i.Name,
 		&i.Title,
 		&i.Description,

@@ -1,11 +1,15 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
+	APIVersion     string
+	BaseAPIPath    string
 	ServerAddress  string
 	JWTSecret      string
 	DBString       string
@@ -26,7 +30,12 @@ func LoadConfig() *Config {
 		log.Info().Msg("Config file loaded")
 	}
 
+	apiVersion := viper.GetString("API_VERSION")
+	BaseAPIPath := fmt.Sprintf("/api/%s", apiVersion)
+
 	return &Config{
+		APIVersion:     apiVersion,
+		BaseAPIPath:    BaseAPIPath,
 		ServerAddress:  viper.GetString("SERVER_ADDRESS"),
 		JWTSecret:      viper.GetString("JWT_SECRET"),
 		DBString:       viper.GetString("DB_STRING"),

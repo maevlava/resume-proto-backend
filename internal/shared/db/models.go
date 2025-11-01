@@ -13,6 +13,7 @@ import (
 
 type Resume struct {
 	ID          uuid.UUID
+	UserID      uuid.UUID
 	Name        string
 	Title       string
 	Description string

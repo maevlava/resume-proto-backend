@@ -2,19 +2,24 @@ package common
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/rs/zerolog/log"
-	"time"
 )
 
 type CustomClaims struct {
-	Email    string `json: "email"`
+	Email    string `json:"email"`
 	Username string `json:"username"`
 	jwt.RegisteredClaims
 }
+type Token struct {
+	Value    string           `json:"token"`
+	Duration *jwt.NumericDate `json:"duration"`
+}
 
-func MakeJWT(user db.User, tokenSecret string, expiresIn time.Duration) (string, error) {
+func MakeJWT(user db.User, tokenSecret string, expiresIn time.Duration) (*Token, error) {
 	// signing method
 	signingMethod := jwt.SigningMethodHS256
 	// claims
@@ -29,15 +34,22 @@ func MakeJWT(user db.User, tokenSecret string, expiresIn time.Duration) (string,
 		},
 	}
 	// token
-	token := jwt.NewWithClaims(signingMethod, claims)
+	tokenClaims := jwt.NewWithClaims(signingMethod, claims)
+
 	// sign token
-	signedToken, err := token.SignedString([]byte(tokenSecret))
+	signedToken, err := tokenClaims.SignedString([]byte(tokenSecret))
 	if err != nil {
 		log.Error().Err(err).Msg("Error signing token")
-		return "", err
+		return nil, err
 	}
+
 	// return token
-	return signedToken, nil
+	token := &Token{
+		Value:    signedToken,
+		Duration: claims.RegisteredClaims.ExpiresAt,
+	}
+
+	return token, nil
 }
 
 func ValidateJWT(tokenString string, tokenSecret string) (*CustomClaims, error) {
