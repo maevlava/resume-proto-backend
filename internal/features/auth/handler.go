@@ -1,93 +1,80 @@
 package auth
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/lib/pq"
+	"github.com/maevlava/resume-backend/internal/features/resume"
 	"github.com/maevlava/resume-backend/internal/shared/common"
 	"github.com/maevlava/resume-backend/internal/shared/config"
 	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/middleware"
-	"github.com/rs/zerolog/log"
+	"github.com/maevlava/resume-backend/internal/shared/server/httperror"
+	"github.com/maevlava/resume-backend/internal/shared/storage"
 )
 
 type Handler struct {
-	cfg *config.Config
-	db  *db.Queries
+	service       *Service
+	resumeService *resume.Service
 }
 
-func NewHandler(cfg *config.Config, db *db.Queries) *Handler {
+func NewHandler(cfg *config.Config, db *db.Queries, store storage.Store) *Handler {
 	return &Handler{
-		cfg: cfg,
-		db:  db,
+		service:       NewService(cfg, db),
+		resumeService: resume.NewService(db, store),
 	}
 }
-func (h *Handler) RegisterRoutes(r *http.ServeMux, mws ...middleware.Middleware) {
-	r.Handle("/api/v1/auth/login", middleware.Chain(http.HandlerFunc(h.Login), mws...))
-	r.Handle("POST /api/v1/auth/register", middleware.Chain(http.HandlerFunc(h.Register), mws...))
-	r.Handle("/api/v1/auth/validate", middleware.Chain(http.HandlerFunc(h.Validate), mws...))
-	r.Handle("/api/v1/auth/logout", middleware.Chain(http.HandlerFunc(h.Logout), mws...))
+func (h *Handler) RegisterRoutes(r *http.ServeMux, baseApiPath string, mws ...middleware.Middleware) {
+	fullPath := baseApiPath + "/auth"
+
+	use := func(path string, fn httperror.HandlerFunc) {
+		route := httperror.Handler(fn)
+		route = middleware.Chain(route, mws...)
+		r.Handle(fullPath+path, route)
+	}
+
+	use("/login", h.Login)
+	use("/logout", h.Logout)
+	use("/register", h.Register)
+	use("/validate", h.Validate)
+	use("/me", h.GetSignedInUser)
+	use("/me/resumes", h.GetUserResumes)
 }
 
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	// get parameters
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 	var loginRequest LoginRequest
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Error().Err(err).Msg("Error reading request body")
-		common.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
-		return
+		return httperror.BadRequest("login: failed reading request body", err)
 	}
+
 	if err := json.Unmarshal(reqBody, &loginRequest); err != nil {
-		log.Error().Err(err).Msg("Error parsing request body")
-		common.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
+		return httperror.BadRequest("login: failed parsing request body", err)
 	}
 
-	// validate
-	user, err := h.db.GetUserByEmail(r.Context(), loginRequest.Email)
+	token, err := h.service.Login(r.Context(), loginRequest.Email, loginRequest.Password)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			common.RespondWithError(w, http.StatusNotFound, "User not found")
-			return
-		}
-		log.Error().Err(err).Msg("Error getting user by email")
-		common.RespondWithError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-	err = common.CheckPasswordHash(loginRequest.Password, user.HashedPassword)
-	if err != nil {
-		common.RespondWithError(w, http.StatusUnauthorized, "Invalid credentials")
-		return
-	}
-
-	// generate token
-	tokenDuration := 24 * time.Hour
-	tokenString, err := common.MakeJWT(user, h.cfg.JWTSecret, tokenDuration)
-	if err != nil {
-		log.Error().Err(err).Msg("Error generating token")
+		return httperror.BadRequest("login: failed to login", err)
 	}
 
 	// register to cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
-		Value:    tokenString,
+		Value:    token.Value,
 		Path:     "/",
-		Expires:  time.Now().Add(tokenDuration),
+		Expires:  token.Duration.Time,
 		HttpOnly: true,
 		Secure:   false, // change to true in production
 	})
 
-	common.RespondWithJSON(w, http.StatusOK, map[string]string{})
-	return
+	w.WriteHeader(http.StatusOK)
+	return nil
 }
 
-func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 	// delete cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
@@ -95,68 +82,90 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Expires:  time.Now(),
 		HttpOnly: true,
 		Secure:   false,
-		Path:     "/api/v1/auth",
+		Path:     "/",
 	})
 
 	common.RespondWithJSON(w, http.StatusOK, map[string]string{})
-	log.Info().Msg("User logged out")
-	return
+
+	return nil
 }
 
-func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) error {
 	// get parameters
-	var registerRequest RegisterRequest
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Error().Err(err).Msg("Error reading request body")
-		common.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
-		return
+		return httperror.BadRequest("register: failed reading request body", err)
 	}
-	if err := json.Unmarshal(reqBody, &registerRequest); err != nil {
-		log.Error().Err(err).Msg("Error parsing request body")
-		common.RespondWithError(w, http.StatusBadRequest, "Invalid request body")
+
+	var registerRequest RegisterRequest
+	if err = json.Unmarshal(reqBody, &registerRequest); err != nil {
+		return httperror.BadRequest("register: failed parsing request body", err)
 	}
-	hashPassword, err := common.HashPassword(registerRequest.Password)
+
+	err = h.service.Register(r.Context(), registerRequest.Name, registerRequest.Email, registerRequest.Password)
 	if err != nil {
-		log.Error().Err(err).Msg("Error hashing password")
-		common.RespondWithError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-	user, err := h.db.CreateUser(r.Context(), db.CreateUserParams{
-		ID:             uuid.New(),
-		Name:           registerRequest.Name,
-		Email:          registerRequest.Email,
-		HashedPassword: hashPassword,
-	})
-	if err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
-			common.RespondWithError(w, http.StatusBadRequest, "email already exists")
-			return
+		if errors.Is(err, ErrEmailExists) {
+			return httperror.BadRequest("register: failed to register", err)
 		}
-		log.Error().Err(err).Msg("Error creating user")
-		common.RespondWithError(w, http.StatusInternalServerError, "Internal server error")
-		return
+		return httperror.InternalServerError("register: failed to register", err)
 	}
-	common.RespondWithJSON(w, http.StatusCreated, user)
+
+	w.WriteHeader(http.StatusCreated)
+	return nil
 }
 
-func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) error {
 	// get token from cookie
 	cookie, err := r.Cookie("auth_token")
 	if err != nil {
-		log.Error().Err(err).Msg("Error getting cookie")
-		common.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
+		return httperror.BadRequest("validate: failed to get cookie", err)
 	}
 
-	// validate token
-	_, err = common.ValidateJWT(cookie.Value, h.cfg.JWTSecret)
+	err = h.service.Validate(cookie.Value)
 	if err != nil {
-		log.Error().Err(err).Msg("Error validating token")
-		common.RespondWithError(w, http.StatusUnauthorized, "Unauthorized")
-		return
+		return httperror.Unauthorized("validate: failed to validate token")
 	}
 
 	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+func (h *Handler) GetSignedInUser(w http.ResponseWriter, r *http.Request) error {
+	// check cookie
+	cookie, err := r.Cookie("auth_token")
+	if err != nil {
+		return httperror.BadRequest("getSignedInUser: failed to get cookie", err)
+	}
+
+	//return user
+	user, err := h.service.GetSignedInUser(r.Context(), cookie.Value)
+	if err != nil {
+		return httperror.BadRequest("getSignedInUser: failed to get user", err)
+	}
+
+	common.RespondWithJSON(w, http.StatusOK, user)
+	return nil
+}
+
+func (h *Handler) GetUserResumes(w http.ResponseWriter, r *http.Request) error {
+	// check cookie
+	cookie, err := r.Cookie("auth_token")
+	if err != nil {
+		return httperror.BadRequest("getUserResumes: failed to get cookie", err)
+	}
+
+	//user
+	user, err := h.service.GetSignedInUser(r.Context(), cookie.Value)
+	if err != nil {
+		return httperror.BadRequest("getUserResumes: failed to get user", err)
+	}
+
+	// resumes
+	resumes, err := h.resumeService.GetAllResumesByID(r.Context(), user.ID)
+	if err != nil {
+		return httperror.InternalServerError("getUserResumes: failed to get resumes", err)
+	}
+
+	common.RespondWithJSON(w, http.StatusOK, resumes)
+	return nil
 }
