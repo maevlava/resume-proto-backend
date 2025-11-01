@@ -2,39 +2,35 @@ package ai
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/maevlava/resume-backend/internal/features/resume"
 	"github.com/maevlava/resume-backend/internal/shared/common"
 	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/deepseek"
 	"github.com/maevlava/resume-backend/internal/shared/storage"
-	"github.com/rs/zerolog/log"
 )
 
 type Service struct {
-	ai    *deepseek.Client
-	db    *db.Queries
-	store storage.Store
+	ai            *deepseek.Client
+	db            *db.Queries
+	store         storage.Store
+	resumeService *resume.Service
 }
 
-func NewService(store storage.Store, ai *deepseek.Client, db *db.Queries) *Service {
+func NewService(store storage.Store, ai *deepseek.Client, db *db.Queries, rs *resume.Service) *Service {
 	return &Service{
-		ai:    ai,
-		store: store,
-		db:    db,
+		ai:            ai,
+		store:         store,
+		db:            db,
+		resumeService: rs,
 	}
 }
 
-func (s *Service) Analyze(ctx context.Context, id string) (uuid.UUID, error) {
+func (s *Service) Analyze(ctx context.Context, resumeID string) (uuid.UUID, error) {
 
-	resumeID, err := uuid.Parse(id)
-	log.Info().Msgf("resume id: %s", resumeID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("analyze: invalid resume id %w", err)
-	}
-	resume, err := s.getResumeByID(ctx, resumeID)
+	resume, err := s.resumeService.GetResumeByID(ctx, resumeID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("analyze: failed to get resume by id: %w", err)
 	}
@@ -50,7 +46,7 @@ func (s *Service) Analyze(ctx context.Context, id string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("analyze: failed to extract pdf text: %w", err)
 	}
 
-	content := resumeContent(pdfContent, resume.Title, resume.Description, resume.CompanyName)
+	content := resumeContent(pdfContent, resume.JobTitle, resume.JobDescription, resume.CompanyName)
 
 	// send to deepseek
 	chatRequest := deepseek.ChatRequest{
@@ -68,52 +64,18 @@ func (s *Service) Analyze(ctx context.Context, id string) (uuid.UUID, error) {
 			},
 		},
 	}
-	log.Info().Msgf("chat request: %s", chatRequest)
 
 	chatResponse, err := s.ai.Chat(ctx, chatRequest)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("analyze: failed to chat with deepseek: %w", err)
 	}
 
-	updatedResumeID, err := s.updateResumeFeedback(ctx, resumeID, *chatResponse)
+	updatedResumeID, err := s.resumeService.UpdateResumeFeedback(ctx, resumeID, *chatResponse)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("analyze: failed to update resume feedback: %w", err)
 	}
 
 	return updatedResumeID, nil
-}
-func (s *Service) getResumeByID(ctx context.Context, resumeID uuid.UUID) (db.Resume, error) {
-
-	resume, err := s.db.GetResumeByID(ctx, resumeID)
-	if err != nil {
-		return db.Resume{}, fmt.Errorf("getResumeByID: failed to get resume by id: %w", err)
-	}
-
-	return resume, nil
-}
-
-func (s *Service) updateResumeFeedback(
-	ctx context.Context,
-	resumeID uuid.UUID,
-	feedback deepseek.ChatResponse) (uuid.UUID, error) {
-
-	if len(feedback.Choices) == 0 {
-		return uuid.Nil, fmt.Errorf("updateResumeFeedback: no feedback provided")
-	}
-	feedbackContent := sql.NullString{
-		String: feedback.Choices[0].Message.Content,
-		Valid:  true,
-	}
-
-	updatedResume, err := s.db.UpdateResumeByID(ctx, db.UpdateResumeByIDParams{
-		ID:       resumeID,
-		Feedback: feedbackContent,
-	})
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("updateResumeFeedback: failed to update resume: %w", err)
-	}
-
-	return updatedResume.ID, nil
 }
 
 const ResponseFormat = `

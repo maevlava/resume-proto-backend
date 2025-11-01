@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/maevlava/resume-backend/internal/features/resume"
 	"github.com/maevlava/resume-backend/internal/shared/common"
 	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/deepseek"
@@ -22,18 +23,21 @@ type Handler struct {
 }
 
 func NewHandler(store storage.Store, ai *deepseek.Client, db *db.Queries) *Handler {
+	rs := resume.NewService(db, store)
+
 	return &Handler{
-		service: NewService(store, ai, db),
+		service: NewService(store, ai, db, rs),
 	}
 }
 
-func (h *Handler) RegisterRoutes(router *http.ServeMux, mws ...middleware.Middleware) {
+func (h *Handler) RegisterRoutes(router *http.ServeMux, baseApiPath string, mws ...middleware.Middleware) {
+	fullPath := baseApiPath + "/ai"
 	use := func(path string, fn httperror.HandlerFunc) {
 		route := httperror.Handler(fn)
 		route = middleware.Chain(route, mws...)
-		router.Handle(path, route)
+		router.Handle(fullPath+path, route)
 	}
-	use("/api/v1/ai/analyze/{id}", h.AnalyzeResume)
+	use("/analyze/{id}", h.AnalyzeResume)
 }
 
 func (h *Handler) AnalyzeResume(w http.ResponseWriter, r *http.Request) error {
