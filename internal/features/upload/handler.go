@@ -4,7 +4,10 @@ import (
 	"mime"
 	"net/http"
 
+	"github.com/maevlava/resume-backend/internal/features/auth"
+	"github.com/maevlava/resume-backend/internal/features/resume"
 	"github.com/maevlava/resume-backend/internal/shared/common"
+	"github.com/maevlava/resume-backend/internal/shared/config"
 	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/middleware"
 	"github.com/maevlava/resume-backend/internal/shared/server/httperror"
@@ -13,28 +16,38 @@ import (
 )
 
 type Handler struct {
-	service *Service
+	service       *Service
+	authService   *auth.Service
+	resumeService *resume.Service
 }
 
-func NewHandler(store storage.Store, db *db.Queries) *Handler {
+func NewHandler(store storage.Store, db *db.Queries, cfg *config.Config) *Handler {
 	return &Handler{
-		service: NewService(store, db),
+		service:       NewService(store, db),
+		authService:   auth.NewService(cfg, db),
+		resumeService: resume.NewService(db, store),
 	}
 }
-func (h *Handler) RegisterRoutes(r *http.ServeMux, mws ...middleware.Middleware) {
+func (h *Handler) RegisterRoutes(r *http.ServeMux, baseApiPath string, mws ...middleware.Middleware) {
+	fullPath := baseApiPath + "/upload"
+
 	use := func(path string, fn httperror.HandlerFunc) {
 		route := httperror.Handler(fn)
 		route = middleware.Chain(route, mws...)
-		r.Handle(path, route)
+		r.Handle(fullPath+path, route)
 	}
-	use("/api/v1/upload", h.Upload)
+	use("", h.Upload)
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
-	// user from middleware context
-	username, ok := r.Context().Value("username").(string)
-	if !ok {
-		return httperror.InternalServerError("user not found in context", nil)
+	cookie, err := r.Cookie("auth_token")
+	if err != nil {
+		return httperror.Unauthorized("upload: failed to get cookie")
+	}
+
+	user, err := h.authService.GetSignedInUser(r.Context(), cookie.Value)
+	if err != nil {
+		return httperror.Unauthorized("upload: failed to get user")
 	}
 
 	const maxSize = 20 * 1024 * 1024
@@ -61,17 +74,18 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// saves
-	pdfPath, err := h.service.SavePDF(username, jobTitle, file)
+	pdfPath, err := h.service.SavePDF(user.Name, jobTitle, file)
 	if err != nil {
 		return httperror.InternalServerError("failed to save pdf", err)
 	}
-	imagePath, err := h.service.SavePDFImage(username, jobTitle, pdfPath)
+	imagePath, err := h.service.SavePDFImage(user.Name, jobTitle, pdfPath)
 	if err != nil {
 		return httperror.InternalServerError("failed to save pdf image", err)
 	}
 
-	resumeID, err := h.service.CreateResume(r.Context(), CreateResumeParams{
-		Name:        username,
+	resumeID, err := h.resumeService.CreateResume(r.Context(), resume.CreateResumeParams{
+		Name:        user.Name,
+		UserID:      user.ID,
 		Title:       jobTitle,
 		Description: jobDescription,
 		CompanyName: companyName,

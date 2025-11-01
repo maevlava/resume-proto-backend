@@ -2,7 +2,6 @@ package upload
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"mime/multipart"
 	"path/filepath"
 
-	"github.com/google/uuid"
 	"github.com/maevlava/resume-backend/internal/shared/common"
 	"github.com/maevlava/resume-backend/internal/shared/db"
 	"github.com/maevlava/resume-backend/internal/shared/storage"
@@ -19,14 +17,6 @@ import (
 type Service struct {
 	store storage.Store
 	db    *db.Queries
-}
-type CreateResumeParams struct {
-	Name        string
-	Title       string
-	Description string
-	CompanyName string
-	ImagePath   string
-	PdfPath     string
 }
 
 func NewService(store storage.Store, db *db.Queries) *Service {
@@ -72,26 +62,6 @@ func (s *Service) SavePDFImage(username, jobTitle, pdfPath string) (string, erro
 	}
 
 	return imagePath, nil
-}
-func (s *Service) CreateResume(
-	ctx context.Context, params CreateResumeParams) (uuid.UUID, error) {
-
-	newResumeParams := db.CreateResumeParams{
-		ID:          uuid.New(),
-		Name:        params.Name,
-		Title:       params.Title,
-		Description: params.Description,
-		CompanyName: params.CompanyName,
-		ImagePath:   params.ImagePath,
-		PdfPath:     params.PdfPath,
-	}
-
-	newResume, err := s.db.CreateResume(ctx, newResumeParams)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("uploadService: failed to create resume: %w", err)
-	}
-
-	return newResume.ID, nil
 }
 
 func generateRandomFileName(length int) string {
